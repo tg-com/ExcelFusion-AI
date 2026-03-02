@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Universal AI Workspace – Enterprise Secure</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-300 min-h-screen flex flex-col">
+
+<div id="loading" class="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900 z-50">
+  <div class="text-lg font-semibold text-gray-700 dark:text-gray-200">Loading App...</div>
+</div>
+
+<div id="app" class="flex flex-1 hidden">
+
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 flex flex-col">
+    <h1 class="text-xl font-bold text-gray-800 dark:text-white mb-4">AI Workspace</h1>
+    
+    <div class="mb-4">
+      <div class="text-sm text-gray-500 dark:text-gray-400">Logged in as:</div>
+      <div id="currentUser" class="font-semibold text-gray-800 dark:text-white"></div>
+      <div id="currentRole" class="text-xs text-blue-600 dark:text-blue-400"></div>
+    </div>
+
+    <button id="manageUsersBtn" class="mb-2 px-3 py-2 rounded bg-blue-500 text-white text-sm hidden">
+      Manage Users
+    </button>
+
+    <button id="logoutBtn" class="mt-auto px-3 py-2 rounded bg-red-500 text-white text-sm">
+      Logout
+    </button>
+
+    <div class="mt-4 flex items-center justify-between">
+      <button id="langToggle" class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">हिन्दी</button>
+      <button id="themeToggle" class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">🌙</button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-6 overflow-auto">
+    <div id="dashboard" class="text-gray-800 dark:text-gray-200">
+      <h2 class="text-2xl font-bold mb-4">Dashboard</h2>
+      <p>This is secure enterprise core system (Part 1 ready).</p>
+    </div>
+  </main>
+</div>
+
+<!-- Login Screen -->
+<div id="loginScreen" class="flex flex-1 items-center justify-center p-4">
+  <div class="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-full max-w-sm">
+    <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Login</h2>
+
+    <input id="usernameInput" type="text" placeholder="Username"
+      class="w-full mb-3 px-3 py-2 border rounded bg-gray-50 dark:bg-gray-700 dark:text-white"/>
+
+    <select id="roleSelect"
+      class="w-full mb-4 px-3 py-2 border rounded bg-gray-50 dark:bg-gray-700 dark:text-white">
+      <option value="Admin">Admin</option>
+      <option value="User">User</option>
+    </select>
+
+    <button id="loginBtn"
+      class="w-full bg-blue-500 text-white px-3 py-2 rounded">
+      Login
+    </button>
+  </div>
+</div>
+
+<script>
+(async function(){
+
+// =============================
+// Safe Init
+// =============================
+const loading = document.getElementById("loading");
+const app = document.getElementById("app");
+const loginScreen = document.getElementById("loginScreen");
+
+// =============================
+// Language System
+// =============================
+const translations = {
+  en: { dashboard: "Dashboard", login: "Login" },
+  hi: { dashboard: "डैशबोर्ड", login: "लॉगिन" }
+};
+
+let currentLang = localStorage.getItem("lang") || "en";
+
+function applyLanguage(){
+  document.documentElement.lang = currentLang;
+}
+
+document.getElementById("langToggle").onclick = () => {
+  currentLang = currentLang === "en" ? "hi" : "en";
+  localStorage.setItem("lang", currentLang);
+  applyLanguage();
+};
+
+applyLanguage();
+
+// =============================
+// Dark Mode
+// =============================
+function applyTheme(){
+  const theme = localStorage.getItem("theme") || "light";
+  if(theme === "dark"){
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+}
+
+document.getElementById("themeToggle").onclick = () => {
+  const current = localStorage.getItem("theme") || "light";
+  localStorage.setItem("theme", current === "light" ? "dark" : "light");
+  applyTheme();
+};
+
+applyTheme();
+
+// =============================
+// Encryption System (AES-GCM)
+// =============================
+async function getKey(){
+  const rawKey = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("enterprise-secret-key"));
+  return crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt","decrypt"]);
+}
+
+async function encryptData(data){
+  try{
+    const key = await getKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(JSON.stringify(data));
+    const ciphertext = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, encoded);
+    return {
+      iv: Array.from(iv),
+      data: Array.from(new Uint8Array(ciphertext))
+    };
+  }catch(e){
+    return null;
+  }
+}
+
+async function decryptData(encrypted){
+  try{
+    const key = await getKey();
+    const iv = new Uint8Array(encrypted.iv);
+    const data = new Uint8Array(encrypted.data);
+    const decrypted = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, data);
+    return JSON.parse(new TextDecoder().decode(decrypted));
+  }catch(e){
+    return null;
+  }
+}
+
+// =============================
+// Multi User System
+// =============================
+async function loadUsers(){
+  const encrypted = localStorage.getItem("users");
+  if(!encrypted) return [];
+  return await decryptData(JSON.parse(encrypted)) || [];
+}
+
+async function saveUsers(users){
+  const encrypted = await encryptData(users);
+  if(encrypted){
+    localStorage.setItem("users", JSON.stringify(encrypted));
+  }
+}
+
+async function login(){
+  const username = document.getElementById("usernameInput").value.trim();
+  const role = document.getElementById("roleSelect").value;
+
+  if(!username) return;
+
+  let users = await loadUsers();
+  let existing = users.find(u => u.username === username);
+
+  if(!existing){
+    users.push({username, role});
+    await saveUsers(users);
+  }
+
+  localStorage.setItem("sessionUser", username);
+  initApp();
+}
+
+document.getElementById("loginBtn").onclick = login;
+
+async function initApp(){
+  const username = localStorage.getItem("sessionUser");
+  if(!username){
+    loginScreen.classList.remove("hidden");
+    app.classList.add("hidden");
+    loading.classList.add("hidden");
+    return;
+  }
+
+  const users = await loadUsers();
+  const user = users.find(u => u.username === username);
+
+  document.getElementById("currentUser").textContent = user.username;
+  document.getElementById("currentRole").textContent = user.role;
+
+  if(user.role === "Admin"){
+    document.getElementById("manageUsersBtn").classList.remove("hidden");
+  }
+
+  loginScreen.classList.add("hidden");
+  app.classList.remove("hidden");
+  loading.classList.add("hidden");
+}
+
+document.getElementById("logoutBtn").onclick = () => {
+  localStorage.removeItem("sessionUser");
+  location.reload();
+};
+
+await initApp();
+
+})();
+</script>
+
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Universal AI Workspace – Enterprise Secure</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-300 min-h-screen flex flex-col">
+
+<div id="loading" class="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900 z-50">
+  <div class="text-lg font-semibold text-gray-700 dark:text-gray-200">Loading App...</div>
+</div>
+
+<div id="app" class="flex flex-1 hidden">
+
+<aside class="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 flex flex-col">
+<h1 class="text-xl font-bold text-gray-800 dark:text-white mb-4">AI Workspace</h1>
+
+<div class="mb-4">
+<div class="text-sm text-gray-500 dark:text-gray-400">User:</div>
+<div id="currentUser" class="font-semibold text-gray-800 dark:text-white"></div>
+<div id="currentRole" class="text-xs text-blue-600 dark:text-blue-400"></div>
+</div>
+
+<button id="manageUsersBtn" class="mb-2 px-3 py-2 rounded bg-blue-500 text-white text-sm hidden">
+Manage Users
+</button>
+
+<button id="apiSettingsBtn" class="mb-2 px-3 py-2 rounded bg-purple-500 text-white text-sm hidden">
+API Settings
+</button>
+
+<button id="logoutBtn" class="mt-auto px-3 py-2 rounded bg-red-500 text-white text-sm">
+Logout
+</button>
+
+<div class="mt-4 flex items-center justify-between">
+<button id="themeToggle" class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">🌙</button>
+</div>
+</aside>
+
+<main class="flex-1 flex flex-col">
+
+<div id="chatContainer" class="flex-1 overflow-auto p-4 space-y-4"></div>
+
+<div class="p-3 border-t dark:border-gray-700 bg-white dark:bg-gray-800">
+<div class="flex space-x-2">
+<input id="chatInput" class="flex-1 px-3 py-2 rounded border dark:bg-gray-700 dark:text-white" placeholder="Type message..."/>
+<button id="sendBtn" class="px-4 py-2 bg-blue-500 text-white rounded">Send</button>
+<button id="deleteChatBtn" class="px-4 py-2 bg-red-500 text-white rounded">Clear</button>
+</div>
+</div>
+
+</main>
+</div>
+
+<div id="loginScreen" class="flex flex-1 items-center justify-center p-4">
+<div class="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-full max-w-sm">
+<h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Login</h2>
+<input id="usernameInput" type="text" placeholder="Username"
+class="w-full mb-3 px-3 py-2 border rounded bg-gray-50 dark:bg-gray-700 dark:text-white"/>
+<select id="roleSelect"
+class="w-full mb-4 px-3 py-2 border rounded bg-gray-50 dark:bg-gray-700 dark:text-white">
+<option value="Admin">Admin</option>
+<option value="User">User</option>
+</select>
+<button id="loginBtn"
+class="w-full bg-blue-500 text-white px-3 py-2 rounded">
+Login
+</button>
+</div>
+</div>
+
+<script>
+(async function(){
+
+const loading = document.getElementById("loading");
+const app = document.getElementById("app");
+const loginScreen = document.getElementById("loginScreen");
+
+const chatContainer = document.getElementById("chatContainer");
+const chatInput = document.getElementById("chatInput");
+const sendBtn = document.getElementById("sendBtn");
+const deleteChatBtn = document.getElementById("deleteChatBtn");
+const apiSettingsBtn = document.getElementById("apiSettingsBtn");
+
+function applyTheme(){
+const theme = localStorage.getItem("theme") || "light";
+if(theme === "dark"){
+document.documentElement.classList.add("dark");
+} else {
+document.documentElement.classList.remove("dark");
+}
+}
+
+document.getElementById("themeToggle").onclick = () => {
+const current = localStorage.getItem("theme") || "light";
+localStorage.setItem("theme", current === "light" ? "dark" : "light");
+applyTheme();
+};
+
+applyTheme();
+
+async function getKey(){
+const rawKey = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("enterprise-secret-key"));
+return crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt","decrypt"]);
+}
+
+async function encryptData(data){
+try{
+const key = await getKey();
+const iv = crypto.getRandomValues(new Uint8Array(12));
+const encoded = new TextEncoder().encode(JSON.stringify(data));
+const ciphertext = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, encoded);
+return {iv:Array.from(iv),data:Array.from(new Uint8Array(ciphertext))};
+}catch(e){return null;}
+}
+
+async function decryptData(encrypted){
+try{
+const key = await getKey();
+const iv = new Uint8Array(encrypted.iv);
+const data = new Uint8Array(encrypted.data);
+const decrypted = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, data);
+return JSON.parse(new TextDecoder().decode(decrypted));
+}catch(e){return null;}
+}
+
+async function loadUsers(){
+const encrypted = localStorage.getItem("users");
+if(!encrypted) return [];
+return await decryptData(JSON.parse(encrypted)) || [];
+}
+
+async function saveUsers(users){
+const encrypted = await encryptData(users);
+if(encrypted) localStorage.setItem("users", JSON.stringify(encrypted));
+}
+
+async function loadChats(username){
+const encrypted = localStorage.getItem("chat_"+username);
+if(!encrypted) return [];
+return await decryptData(JSON.parse(encrypted)) || [];
+}
+
+async function saveChats(username,chats){
+const encrypted = await encryptData(chats);
+if(encrypted) localStorage.setItem("chat_"+username, JSON.stringify(encrypted));
+}
+
+async function login(){
+const username = document.getElementById("usernameInput").value.trim();
+const role = document.getElementById("roleSelect").value;
+if(!username) return;
+
+let users = await loadUsers();
+let existing = users.find(u => u.username === username);
+if(!existing){
+users.push({username,role});
+await saveUsers(users);
+}
+localStorage.setItem("sessionUser", username);
+initApp();
+}
+
+document.getElementById("loginBtn").onclick = login;
+
+async function initApp(){
+const username = localStorage.getItem("sessionUser");
+if(!username){
+loginScreen.classList.remove("hidden");
+app.classList.add("hidden");
+loading.classList.add("hidden");
+return;
+}
+
+const users = await loadUsers();
+const user = users.find(u => u.username === username);
+
+document.getElementById("currentUser").textContent = user.username;
+document.getElementById("currentRole").textContent = user.role;
+
+if(user.role === "Admin"){
+document.getElementById("manageUsersBtn").classList.remove("hidden");
+apiSettingsBtn.classList.remove("hidden");
+}
+
+loginScreen.classList.add("hidden");
+app.classList.remove("hidden");
+loading.classList.add("hidden");
+
+loadChatUI();
+}
+
+async function loadChatUI(){
+chatContainer.innerHTML="";
+const username = localStorage.getItem("sessionUser");
+const chats = await loadChats(username);
+
+chats.forEach(msg=>{
+addMessage(msg.role,msg.content);
+});
+}
+
+function addMessage(role,content){
+const div=document.createElement("div");
+div.className = role==="user"?
+"text-right":
+"text-left";
+div.innerHTML = `<div class="inline-block px-3 py-2 rounded ${
+role==="user"?
+"bg-blue-500 text-white":
+"bg-gray-200 dark:bg-gray-700 dark:text-white"
+}">${marked.parse(content)}</div>`;
+chatContainer.appendChild(div);
+chatContainer.scrollTop=chatContainer.scrollHeight;
+}
+
+async function sendMessage(){
+const text=chatInput.value.trim();
+if(!text) return;
+chatInput.value="";
+
+addMessage("user",text);
+
+const username=localStorage.getItem("sessionUser");
+let chats=await loadChats(username);
+chats.push({role:"user",content:text});
+await saveChats(username,chats);
+
+const aiDiv=document.createElement("div");
+aiDiv.className="text-left";
+aiDiv.innerHTML=`<div class="inline-block px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 dark:text-white"></div>`;
+chatContainer.appendChild(aiDiv);
+const aiBox=aiDiv.firstChild;
+
+let responseText="";
+
+try{
+const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"Authorization":"Bearer "+(localStorage.getItem("apiKey")||"")
+},
+body:JSON.stringify({
+model:localStorage.getItem("model")||"deepseek/deepseek-r1:free",
+stream:true,
+messages:[...chats,{role:"user",content:text}]
+})
+});
+
+const reader=res.body.getReader();
+const decoder=new TextDecoder();
+
+while(true){
+const {done,value}=await reader.read();
+if(done) break;
+const chunk=decoder.decode(value);
+responseText+=chunk;
+aiBox.innerHTML=marked.parse(responseText);
+chatContainer.scrollTop=chatContainer.scrollHeight;
+}
+
+}catch(e){
+aiBox.innerHTML="Error: API issue";
+}
+
+chats.push({role:"assistant",content:responseText});
+await saveChats(username,chats);
+}
+
+sendBtn.onclick=sendMessage;
+
+deleteChatBtn.onclick=async()=>{
+const username=localStorage.getItem("sessionUser");
+await saveChats(username,[]);
+chatContainer.innerHTML="";
+};
+
+document.getElementById("logoutBtn").onclick=()=>{
+localStorage.removeItem("sessionUser");
+location.reload();
+};
+
+await initApp();
+
+})();
+</script>
+
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Universal AI Workspace – Enterprise Secure</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-300 min-h-screen flex flex-col">
+
+<div id="loading" class="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900 z-50">
+  <div class="text-lg font-semibold text-gray-700 dark:text-gray-200">Loading App...</div>
+</div>
+
+<div id="app" class="flex flex-1 hidden">
+
+<aside class="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 flex flex-col">
+<h1 class="text-xl font-bold text-gray-800 dark:text-white mb-4">AI Workspace</h1>
+
+<div class="mb-4">
+<div class="text-sm text-gray-500 dark:text-gray-400">User:</div>
+<div id="currentUser" class="font-semibold text-gray-800 dark:text-white"></div>
+<div id="currentRole" class="text-xs text-blue-600 dark:text-blue-400"></div>
+</div>
+
+<button id="chatModeBtn" class="mb-2 px-3 py-2 rounded bg-blue-500 text-white text-sm">Chat</button>
+<button id="ocrModeBtn" class="mb-2 px-3 py-2 rounded bg-green-500 text-white text-sm">OCR Scanner</button>
+
+<button id="logoutBtn" class="mt-auto px-3 py-2 rounded bg-red-500 text-white text-sm">
+Logout
+</button>
+
+<div class="mt-4 flex items-center justify-between">
+<button id="themeToggle" class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">🌙</button>
+</div>
+</aside>
+
+<main class="flex-1 flex flex-col">
+
+<!-- CHAT SECTION -->
+<div id="chatSection" class="flex flex-col flex-1">
+<div id="chatContainer" class="flex-1 overflow-auto p-4 space-y-4"></div>
+<div class="p-3 border-t dark:border-gray-700 bg-white dark:bg-gray-800">
+<div class="flex space-x-2">
+<input id="chatInput" class="flex-1 px-3 py-2 rounded border dark:bg-gray-700 dark:text-white" placeholder="Type message..."/>
+<button id="sendBtn" class="px-4 py-2 bg-blue-500 text-white rounded">Send</button>
+<button id="deleteChatBtn" class="px-4 py-2 bg-red-500 text-white rounded">Clear</button>
+</div>
+</div>
+</div>
+
+<!-- OCR SECTION -->
+<div id="ocrSection" class="hidden flex-1 overflow-auto p-4 space-y-4">
+
+<div>
+<input type="file" id="imageInput" multiple accept="image/*"
+class="block w-full text-sm text-gray-700 dark:text-white"/>
+</div>
+
+<button id="processBtn" class="px-4 py-2 bg-green-600 text-white rounded">
+Process Images
+</button>
+
+<div id="ocrResults" class="space-y-4"></div>
+
+</div>
+
+</main>
+</div>
+
+<div id="loginScreen" class="flex flex-1 items-center justify-center p-4">
+<div class="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-full max-w-sm">
+<h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Login</h2>
+<input id="usernameInput" type="text" placeholder="Username"
+class="w-full mb-3 px-3 py-2 border rounded bg-gray-50 dark:bg-gray-700 dark:text-white"/>
+<select id="roleSelect"
+class="w-full mb-4 px-3 py-2 border rounded bg-gray-50 dark:bg-gray-700 dark:text-white">
+<option value="Admin">Admin</option>
+<option value="User">User</option>
+</select>
+<button id="loginBtn"
+class="w-full bg-blue-500 text-white px-3 py-2 rounded">
+Login
+</button>
+</div>
+</div>
+
+<script>
+(async function(){
+
+const loading = document.getElementById("loading");
+const app = document.getElementById("app");
+const loginScreen = document.getElementById("loginScreen");
+
+const chatSection = document.getElementById("chatSection");
+const ocrSection = document.getElementById("ocrSection");
+
+document.getElementById("chatModeBtn").onclick=()=>{
+chatSection.classList.remove("hidden");
+ocrSection.classList.add("hidden");
+};
+
+document.getElementById("ocrModeBtn").onclick=()=>{
+ocrSection.classList.remove("hidden");
+chatSection.classList.add("hidden");
+};
+
+function applyTheme(){
+const theme = localStorage.getItem("theme") || "light";
+if(theme === "dark"){
+document.documentElement.classList.add("dark");
+} else {
+document.documentElement.classList.remove("dark");
+}
+}
+
+document.getElementById("themeToggle").onclick = () => {
+const current = localStorage.getItem("theme") || "light";
+localStorage.setItem("theme", current === "light" ? "dark" : "light");
+applyTheme();
+};
+
+applyTheme();
+
+// ================= OCR PROCESSING =================
+
+function detectFields(text){
+
+const nameMatch = text.match(/Name[:\s]+([A-Za-z ]+)/i);
+const dateMatch = text.match(/\b(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})\b/);
+const amountMatch = text.match(/(Total|Amount)[^\d]*([\d,.]+)/i);
+const gstMatch = text.match(/GST[^\d]*([\d,.]+)/i);
+
+let amount = amountMatch ? parseFloat(amountMatch[2].replace(/,/g,'')) : 0;
+let gst = gstMatch ? parseFloat(gstMatch[1].replace(/,/g,'')) : 0;
+
+if(!gst && amount){
+gst = amount * 0.18;
+}
+
+return {
+name: nameMatch ? nameMatch[1] : "",
+date: dateMatch ? dateMatch[1] : "",
+amount: amount || 0,
+gst: gst || 0,
+total: amount + gst
+};
+}
+
+document.getElementById("processBtn").onclick = async () => {
+const files = document.getElementById("imageInput").files;
+if(!files.length) return;
+
+const resultsDiv = document.getElementById("ocrResults");
+resultsDiv.innerHTML="";
+
+for(let i=0;i<files.length && i<25;i++){
+const file = files[i];
+
+const resultBlock = document.createElement("div");
+resultBlock.className="p-4 border rounded bg-white dark:bg-gray-800 dark:text-white";
+resultBlock.innerHTML="Processing "+file.name+"...";
+resultsDiv.appendChild(resultBlock);
+
+try{
+const { data: { text } } = await Tesseract.recognize(file,'eng+hin');
+
+const fields = detectFields(text);
+
+resultBlock.innerHTML = `
+<div class="font-semibold">${file.name}</div>
+<div>Name: ${fields.name}</div>
+<div>Date: ${fields.date}</div>
+<div>Amount: ₹${fields.amount.toFixed(2)}</div>
+<div>GST: ₹${fields.gst.toFixed(2)}</div>
+<div>Total: ₹${fields.total.toFixed(2)}</div>
+<details class="mt-2">
+<summary>Raw Text</summary>
+<pre class="text-xs whitespace-pre-wrap">${text}</pre>
+</details>
+`;
+
+}catch(e){
+resultBlock.innerHTML="Error processing "+file.name;
+}
+}
+};
+
+// ================= LOGIN =================
+
+document.getElementById("loginBtn").onclick = () => {
+const username = document.getElementById("usernameInput").value.trim();
+if(!username) return;
+localStorage.setItem("sessionUser", username);
+initApp();
+};
+
+function initApp(){
+const username = localStorage.getItem("sessionUser");
+if(!username){
+loginScreen.classList.remove("hidden");
+app.classList.add("hidden");
+loading.classList.add("hidden");
+return;
+}
+
+document.getElementById("currentUser").textContent = username;
+
+loginScreen.classList.add("hidden");
+app.classList.remove("hidden");
+loading.classList.add("hidden");
+}
+
+document.getElementById("logoutBtn").onclick=()=>{
+localStorage.removeItem("sessionUser");
+location.reload();
+};
+
+initApp();
+
+})();
+</script>
+
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Universal AI Workspace – Enterprise Secure</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf/dist/jspdf.umd.min.js"></script>
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 min-h-screen flex flex-col transition-colors duration-300">
+
+<div id="loading" class="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900 z-50">
+<div class="text-lg font-semibold text-gray-700 dark:text-gray-200">Loading App...</div>
+</div>
+
+<div id="app" class="flex flex-1 hidden">
+
+<!-- Sidebar -->
+<aside class="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 flex flex-col">
+<h1 class="text-xl font-bold text-gray-800 dark:text-white mb-4">AI Workspace</h1>
+
+<div class="mb-4">
+<div class="text-sm text-gray-500 dark:text-gray-400">User:</div>
+<div id="currentUser" class="font-semibold text-gray-800 dark:text-white"></div>
+</div>
+
+<button id="chatModeBtn" class="mb-2 px-3 py-2 rounded bg-blue-500 text-white text-sm">Chat</button>
+<button id="ocrModeBtn" class="mb-2 px-3 py-2 rounded bg-green-500 text-white text-sm">OCR Scanner</button>
+
+<button id="logoutBtn" class="mt-auto px-3 py-2 rounded bg-red-500 text-white text-sm">Logout</button>
+
+<div class="mt-4">
+<button id="themeToggle" class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">🌙</button>
+</div>
+</aside>
+
+<main class="flex-1 flex flex-col">
+
+<!-- CHAT -->
+<div id="chatSection" class="flex flex-col flex-1">
+<div id="chatContainer" class="flex-1 overflow-auto p-4 space-y-4"></div>
+<div class="p-3 border-t dark:border-gray-700 bg-white dark:bg-gray-800">
+<div class="flex space-x-2">
+<input id="chatInput" class="flex-1 px-3 py-2 rounded border dark:bg-gray-700 dark:text-white" placeholder="Type message..."/>
+<button id="sendBtn" class="px-4 py-2 bg-blue-500 text-white rounded">Send</button>
+<button id="deleteChatBtn" class="px-4 py-2 bg-red-500 text-white rounded">Clear</button>
+</div>
+</div>
+</div>
+
+<!-- OCR -->
+<div id="ocrSection" class="hidden flex-1 overflow-auto p-4 space-y-4">
+
+<input type="file" id="imageInput" multiple accept="image/*"
+class="block w-full text-sm text-gray-700 dark:text-white"/>
+
+<button id="processBtn" class="px-4 py-2 bg-green-600 text-white rounded">
+Process Images
+</button>
+
+<div class="flex space-x-2">
+<button id="excelBtn" class="px-4 py-2 bg-blue-600 text-white rounded hidden">
+Export Excel
+</button>
+<button id="pdfBtn" class="px-4 py-2 bg-purple-600 text-white rounded hidden">
+Export PDF
+</button>
+</div>
+
+<div id="ocrResults" class="space-y-4"></div>
+
+</div>
+
+</main>
+</div>
+
+<div id="loginScreen" class="flex flex-1 items-center justify-center p-4">
+<div class="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-full max-w-sm">
+<h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Login</h2>
+<input id="usernameInput" type="text" placeholder="Username"
+class="w-full mb-3 px-3 py-2 border rounded bg-gray-50 dark:bg-gray-700 dark:text-white"/>
+<button id="loginBtn"
+class="w-full bg-blue-500 text-white px-3 py-2 rounded">
+Login
+</button>
+</div>
+</div>
+
+<script>
+(async function(){
+
+const loading = document.getElementById("loading");
+const app = document.getElementById("app");
+const loginScreen = document.getElementById("loginScreen");
+const chatSection = document.getElementById("chatSection");
+const ocrSection = document.getElementById("ocrSection");
+
+let ocrData = [];
+
+document.getElementById("chatModeBtn").onclick=()=>{
+chatSection.classList.remove("hidden");
+ocrSection.classList.add("hidden");
+};
+
+document.getElementById("ocrModeBtn").onclick=()=>{
+ocrSection.classList.remove("hidden");
+chatSection.classList.add("hidden");
+};
+
+document.getElementById("themeToggle").onclick=()=>{
+const theme = document.documentElement.classList.contains("dark")?"light":"dark";
+localStorage.setItem("theme",theme);
+document.documentElement.classList.toggle("dark");
+};
+
+document.getElementById("loginBtn").onclick=()=>{
+const username=document.getElementById("usernameInput").value.trim();
+if(!username) return;
+localStorage.setItem("sessionUser",username);
+initApp();
+};
+
+function initApp(){
+const username=localStorage.getItem("sessionUser");
+if(!username){
+loginScreen.classList.remove("hidden");
+app.classList.add("hidden");
+loading.classList.add("hidden");
+return;
+}
+document.getElementById("currentUser").textContent=username;
+loginScreen.classList.add("hidden");
+app.classList.remove("hidden");
+loading.classList.add("hidden");
+}
+
+document.getElementById("logoutBtn").onclick=()=>{
+localStorage.removeItem("sessionUser");
+location.reload();
+};
+
+function detectFields(text){
+const nameMatch = text.match(/Name[:\s]+([A-Za-z ]+)/i);
+const dateMatch = text.match(/\b(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})\b/);
+const amountMatch = text.match(/(Total|Amount)[^\d]*([\d,.]+)/i);
+let amount = amountMatch ? parseFloat(amountMatch[2].replace(/,/g,'')) : 0;
+let gst = amount * 0.18;
+return {
+name: nameMatch ? nameMatch[1] : "",
+date: dateMatch ? dateMatch[1] : "",
+amount,
+gst,
+total: amount+gst,
+raw:text
+};
+}
+
+document.getElementById("processBtn").onclick=async()=>{
+const files=document.getElementById("imageInput").files;
+if(!files.length) return;
+
+ocrData=[];
+document.getElementById("ocrResults").innerHTML="";
+
+for(let i=0;i<files.length && i<25;i++){
+const file=files[i];
+const block=document.createElement("div");
+block.className="p-4 border rounded bg-white dark:bg-gray-800 dark:text-white";
+block.innerHTML="Processing "+file.name+"...";
+document.getElementById("ocrResults").appendChild(block);
+
+try{
+const { data:{text} } = await Tesseract.recognize(file,'eng+hin');
+const fields=detectFields(text);
+fields.file=file.name;
+ocrData.push(fields);
+
+block.innerHTML=`
+<div class="font-semibold">${file.name}</div>
+<div>Name: ${fields.name}</div>
+<div>Date: ${fields.date}</div>
+<div>Amount: ₹${fields.amount.toFixed(2)}</div>
+<div>GST (18%): ₹${fields.gst.toFixed(2)}</div>
+<div>Total: ₹${fields.total.toFixed(2)}</div>
+`;
+
+}catch(e){
+block.innerHTML="Error processing "+file.name;
+}
+}
+
+if(ocrData.length){
+document.getElementById("excelBtn").classList.remove("hidden");
+document.getElementById("pdfBtn").classList.remove("hidden");
+}
+};
+
+document.getElementById("excelBtn").onclick=()=>{
+const ws=XLSX.utils.json_to_sheet(ocrData);
+const wb=XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb,ws,"Bills");
+XLSX.writeFile(wb,"ai-bill-extracted.xlsx");
+};
+
+document.getElementById("pdfBtn").onclick=()=>{
+const { jsPDF } = window.jspdf;
+const doc=new jsPDF();
+let y=10;
+
+doc.setFontSize(16);
+doc.text("AI Bill Report",10,y);
+y+=10;
+
+ocrData.forEach((item,i)=>{
+doc.setFontSize(12);
+doc.text(`File: ${item.file}`,10,y); y+=6;
+doc.text(`Name: ${item.name}`,10,y); y+=6;
+doc.text(`Date: ${item.date}`,10,y); y+=6;
+doc.text(`Amount: ${item.amount}`,10,y); y+=6;
+doc.text(`GST: ${item.gst}`,10,y); y+=6;
+doc.text(`Total: ${item.total}`,10,y); y+=10;
+if(y>270){doc.addPage();y=10;}
+});
+
+doc.save("ai-bill-report.pdf");
+};
+
+initApp();
+
+})();
+</script>
+
+</body>
+</html>
